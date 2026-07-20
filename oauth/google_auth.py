@@ -1,87 +1,90 @@
-"""
-Google Ads OAuth Authentication - environment variables based
-"""
-
 import os
-import requests
 import logging
-from typing import Dict, Any
-
+import requests
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+logger = logging.getLogger("google_ads_server")
 
-logger = logging.getLogger(__name__)
+# Current stable Google Ads API major version (v19 is sunsetted -> 404).
+API_VERSION = "v21"
 
-SCOPES = ['https://www.googleapis.com/auth/adwords']
-API_VERSION = "v17"
+TOKEN_URI = "https://oauth2.googleapis.com/token"
+SCOPES = ["https://www.googleapis.com/auth/adwords"]
 
-GOOGLE_ADS_DEVELOPER_TOKEN = os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN")
-GOOGLE_ADS_CLIENT_ID = os.environ.get("GOOGLE_ADS_CLIENT_ID")
-GOOGLE_ADS_CLIENT_SECRET = os.environ.get("GOOGLE_ADS_CLIENT_SECRET")
-GOOGLE_ADS_REFRESH_TOKEN = os.environ.get("GOOGLE_ADS_REFRESH_TOKEN")
 
-def format_customer_id(customer_id: str) -> str:
-    customer_id = str(customer_id).replace('\"', '').replace('"', '')
-    customer_id = ''.join(c for c in customer_id if c.isdigit())
-    return customer_id.zfill(10)
+def _get_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
 
-def get_oauth_credentials():
-    """Build credentials directly from environment variables."""
-    if not all([GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET, GOOGLE_ADS_REFRESH_TOKEN]):
-        raise ValueError(
-            "Missing required environment variables: "
-            "GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET, GOOGLE_ADS_REFRESH_TOKEN"
-        )
+
+def get_credentials() -> Credentials:
+    """
+    Build OAuth credentials purely from environment variables.
+    No config file / no GOOGLE_ADS_OAUTH_CONFIG_PATH needed.
+    """
+    client_id = _get_env("GOOGLE_ADS_CLIENT_ID")
+    client_secret = _get_env("GOOGLE_ADS_CLIENT_SECRET")
+    refresh_token = _get_env("GOOGLE_ADS_REFRESH_TOKEN")
 
     creds = Credentials(
         token=None,
-        refresh_token=GOOGLE_ADS_REFRESH_TOKEN,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=GOOGLE_ADS_CLIENT_ID,
-        client_secret=GOOGLE_ADS_CLIENT_SECRET,
+        refresh_token=refresh_token,
+        client_id=client_id,
+        client_secret=client_secret,
+        token_uri=TOKEN_URI,
         scopes=SCOPES,
     )
 
+    # Always refresh to obtain a valid access token from the refresh token.
     creds.refresh(Request())
-    logger.info("OAuth token refreshed successfully from environment variables")
     return creds
 
-def get_headers_with_auto_token() -> Dict[str, str]:
-    if not GOOGLE_ADS_DEVELOPER_TOKEN:
-        raise ValueError("GOOGLE_ADS_DEVELOPER_TOKEN environment variable not set")
 
-    creds = get_oauth_credentials()
+def get_headers(creds: Credentials) -> dict:
+    """
+    Standard headers for Google Ads REST calls.
+    login-customer-id is set to the Manager (MCC) account when provided.
+    """
+    developer_token = _get_env("GOOGLE_ADS_DEVELOPER_TOKEN")
 
-    return {
-        'Authorization': f'Bearer {creds.token}',
-        'Developer-Token': GOOGLE_ADS_DEVELOPER_TOKEN.strip('"').strip("'"),
-        'Content-Type': 'application/json'
+    if not creds.valid:
+        creds.refresh(Request())
+
+    headers = {
+        "Authorization": f"Bearer {creds.token}",
+        "developer-token": developer_token,
+        "content-type": "application/json",
     }
 
-def execute_gaql(customer_id: str, query: str, manager_id: str = "") -> Dict[str, Any]:
-    headers = get_headers_with_auto_token()
-    formatted_customer_id = format_customer_id(customer_id)
-    url = f"https://googleads.googleapis.com/{API_VERSION}/customers/{formatted_customer_id}/googleAds:search"
+    login_customer_id = os.environ.get("GOOGLE_ADS_LOGIN_CUSTOMER_ID")
+    if login_customer_id:
+        headers["login-customer-id"] = login_customer_id.replace("-", "")
 
-    if manager_id:
-        headers['login-customer-id'] = format_customer_id(manager_id)
+    return headers
 
-    payload = {'query': query}
-    resp = requests.post(url, headers=headers, json=payload)
 
-    if not resp.ok:
-        raise Exception(f"Error executing GAQL: {resp.status_code} {resp.reason} - {resp.text}")
+def search(customer_id: str, query: str) -> dict:
+    """
+    Execute a GAQL query via the Google Ads REST search endpoint.
+    """
+    creds = get_credentials()
+    headers = get_headers(creds)
 
-    data = resp.json()
-    results = data.get('results', [])
-    return {
-        'results': results,
-        'query': query,
-        'totalRows': len(results),
-    }
+    formatted_customer_id = customer_id.replace("-", "")
+    url = (
+        f"https://googleads.googleapis.com/{API_VERSION}"
+        f"/customers/{formatted_customer_id}/googleAds:search"
+    )
+
+    response = requests.post(url, headers=headers, json={"query": query}, timeout=60)
+
+    if response.status_code != 200:
+        logger.error(
+            "Google Ads API error %s: %s", response.status_code, response.text
+        )
+        response.raise_for_status()
+
+    return response.json()
