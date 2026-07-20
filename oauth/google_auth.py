@@ -3,7 +3,6 @@ Google Ads OAuth Authentication - environment variables based
 """
 
 import os
-import json
 import requests
 import logging
 from typing import Dict, Any
@@ -20,7 +19,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/adwords']
-API_VERSION = "v19"
+API_VERSION = "v17"
 
 GOOGLE_ADS_DEVELOPER_TOKEN = os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN")
 GOOGLE_ADS_CLIENT_ID = os.environ.get("GOOGLE_ADS_CLIENT_ID")
