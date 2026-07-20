@@ -458,7 +458,7 @@ if __name__ == "__main__":
     # Check command line arguments for transport mode
     if "--http" in sys.argv:
         logger.info("Starting with HTTP transport on http://127.0.0.1:8000/mcp")
-        mcp.run(transport="streamable-http", host="127.0.0.1", port=8000, path="/mcp")
+        mcp.run(transport="streamable-http", host="0.0.0.0", port=8000, path="/mcp")
     else:
         # Default to STDIO for Claude Desktop compatibility
         logger.info("Starting with STDIO transport for Claude Desktop")
