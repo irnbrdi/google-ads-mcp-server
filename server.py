@@ -457,8 +457,12 @@ if __name__ == "__main__":
     
     # Check command line arguments for transport mode
     if "--http" in sys.argv:
-        logger.info("Starting with HTTP transport on http://127.0.0.1:8000/mcp")
-        mcp.run(transport="streamable-http", host="127.0.0.1", port=8000, path="/mcp")
+        # Bind to 0.0.0.0 and honor the platform-provided PORT (e.g. Railway) so the
+        # server is reachable from outside the container. Falls back to 8000 locally.
+        host = os.environ.get("HOST", "0.0.0.0")
+        port = int(os.environ.get("PORT", 8000))
+        logger.info(f"Starting with HTTP transport on http://{host}:{port}/mcp")
+        mcp.run(transport="streamable-http", host=host, port=port, path="/mcp")
     else:
         # Default to STDIO for Claude Desktop compatibility
         logger.info("Starting with STDIO transport for Claude Desktop")
