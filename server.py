@@ -114,7 +114,7 @@ def list_accounts(ctx: Context = None) -> Dict[str, Any]:
         headers = get_headers_with_auto_token()
         
         # Fetch top-level accessible customers
-        url = "https://googleads.googleapis.com/v19/customers:listAccessibleCustomers"
+        url = "https://googleads.googleapis.com/v21/customers:listAccessibleCustomers"
         resp = requests.get(url, headers=headers)
         if not resp.ok:
             if ctx:
@@ -229,7 +229,7 @@ def run_keyword_planner(
         headers = get_headers_with_auto_token()
         
         formatted_customer_id = format_customer_id(customer_id)
-        url = f"https://googleads.googleapis.com/v19/customers/{formatted_customer_id}:generateKeywordIdeas"
+        url = f"https://googleads.googleapis.com/v21/customers/{formatted_customer_id}:generateKeywordIdeas"
         
         if manager_id:
             headers['login-customer-id'] = format_customer_id(manager_id)
@@ -458,7 +458,7 @@ if __name__ == "__main__":
     # Check command line arguments for transport mode
     if "--http" in sys.argv:
         logger.info("Starting with HTTP transport on http://127.0.0.1:8000/mcp")
-        mcp.run(transport="streamable-http", host="0.0.0.0", port=8000, path="/mcp")
+        mcp.run(transport="streamable-http", host="127.0.0.1", port=8000, path="/mcp")
     else:
         # Default to STDIO for Claude Desktop compatibility
         logger.info("Starting with STDIO transport for Claude Desktop")
